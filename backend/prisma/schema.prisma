@@ -1,0 +1,243 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ----------------------------------------
+// INVENTORY & PRODUCT MODULE
+// ----------------------------------------
+
+model Product {
+  id              String   @id @default(uuid())
+  barcode         String?  @unique
+  name            String
+  category        String   // e.g., 'Paint', 'Tool', 'Sundry'
+  brand           String
+  base_type       String?  // null if not a base paint; e.g., 'White', 'Deep', 'Clear'
+  unit            String   // 'ML', 'LITER', 'GALLON', 'PAIL', 'PCS'
+  cost_price      Float
+  selling_price   Float
+  stock_quantity  Float
+  reorder_level   Float
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  // Relationships
+  transactionItems TransactionItem[]
+  colorFormulas    ColorFormula[]    @relation("BaseProduct")
+  formulaTints     FormulaTint[]
+  poItems          POItem[]
+}
+
+// ----------------------------------------
+// CUSTOMER & CONTRACTOR MODULE
+// ----------------------------------------
+
+model Customer {
+  id                  String       @id @default(uuid())
+  name                String
+  contact_details     String?
+  address             String?
+  customer_type       String       @default("RETAIL") // 'RETAIL', 'CONTRACTOR'
+  credit_limit        Float        @default(0.00)
+  outstanding_balance Float        @default(0.00)
+  created_at          DateTime     @default(now())
+  updated_at          DateTime     @updatedAt
+
+  // Relationships
+  transactions        Transaction[]
+  invoices            Invoice[]
+  colorFormulas       ColorFormula[]
+}
+
+// ----------------------------------------
+// SALES / POS MODULE
+// ----------------------------------------
+
+model Transaction {
+  id              String            @id @default(uuid())
+  receipt_number  String            @unique
+  customer_id     String?
+  customer        Customer?         @relation(fields: [customer_id], references: [id])
+  total_amount    Float
+  discount        Float             @default(0.00)
+  net_amount      Float
+  payment_method  String            // 'CASH', 'GCASH', 'BANK', 'CREDIT'
+  status          String            @default("COMPLETED") // 'COMPLETED', 'RETURNED', 'CANCELLED'
+  created_at      DateTime          @default(now())
+  updated_at      DateTime          @updatedAt
+
+  // Relationships
+  items           TransactionItem[]
+  tintingJobs     TintingJob[]
+  invoices        Invoice[]
+}
+
+model TransactionItem {
+  id             String      @id @default(uuid())
+  transaction_id String
+  transaction    Transaction @relation(fields: [transaction_id], references: [id])
+  product_id     String
+  product        Product     @relation(fields: [product_id], references: [id])
+  quantity       Float
+  unit_price     Float
+  subtotal       Float
+}
+
+// ----------------------------------------
+// PAINT MIXING / TINTING MODULE
+// ----------------------------------------
+
+model ColorFormula {
+  id              String       @id @default(uuid())
+  customer_id     String?
+  customer        Customer?    @relation(fields: [customer_id], references: [id])
+  color_name      String
+  color_code      String
+  brand           String
+  base_product_id String
+  baseProduct     Product      @relation("BaseProduct", fields: [base_product_id], references: [id])
+  total_volume_ml Float        @default(0.00) // Legacy compatibility
+  total_amount    Float        @default(0.00)
+  unit            String       @default("ML") // 'ML', 'G', 'KG'
+  created_at      DateTime     @default(now())
+  updated_at      DateTime     @updatedAt
+
+  tints           FormulaTint[]
+  jobs            TintingJob[]
+}
+
+model FormulaTint {
+  id              String       @id @default(uuid())
+  formula_id      String
+  formula         ColorFormula @relation(fields: [formula_id], references: [id])
+  tint_product_id String
+  tintProduct     Product      @relation(fields: [tint_product_id], references: [id])
+  volume_ml       Float        @default(0.00) // Legacy
+  amount          Float        @default(0.00)
+  unit            String       @default("ML")
+}
+
+model TintingJob {
+  id                String       @id @default(uuid())
+  transaction_id    String
+  transaction       Transaction  @relation(fields: [transaction_id], references: [id])
+  formula_id        String
+  formula           ColorFormula @relation(fields: [formula_id], references: [id])
+  quantity_produced Int          @default(1)
+  created_at        DateTime     @default(now())
+}
+
+// ----------------------------------------
+// CREDIT / ACCOUNTS RECEIVABLE MODULE
+// ----------------------------------------
+
+model Invoice {
+  id                String        @id @default(uuid())
+  transaction_id    String
+  transaction       Transaction   @relation(fields: [transaction_id], references: [id])
+  customer_id       String
+  customer          Customer      @relation(fields: [customer_id], references: [id])
+  amount_due        Float
+  due_date          DateTime
+  remaining_balance Float
+  status            String        @default("UNPAID") // 'UNPAID', 'PARTIAL', 'PAID'
+  created_at        DateTime      @default(now())
+  updated_at        DateTime      @updatedAt
+
+  payments          Payment[]
+}
+
+model Payment {
+  id             String        @id @default(uuid())
+  invoice_id     String
+  invoice        Invoice       @relation(fields: [invoice_id], references: [id])
+  amount_paid    Float
+  payment_date   DateTime      @default(now())
+  payment_method String        // 'CASH', 'GCASH', 'BANK'
+}
+
+// ----------------------------------------
+// PURCHASING / SUPPLIER MODULE
+// ----------------------------------------
+
+model Supplier {
+  id              String          @id @default(uuid())
+  name            String
+  contact_details String?
+  address         String?
+  created_at      DateTime        @default(now())
+  updated_at      DateTime        @updatedAt
+
+  purchaseOrders  PurchaseOrder[]
+}
+
+model PurchaseOrder {
+  id           String    @id @default(uuid())
+  supplier_id  String
+  supplier     Supplier  @relation(fields: [supplier_id], references: [id])
+  po_number    String    @unique
+  status       String    @default("PENDING") // 'PENDING', 'RECEIVED'
+  total_cost   Float
+  created_at   DateTime  @default(now())
+  updated_at   DateTime  @updatedAt
+
+  items        POItem[]
+}
+
+model POItem {
+  id                String        @id @default(uuid())
+  purchase_order_id String
+  purchaseOrder     PurchaseOrder @relation(fields: [purchase_order_id], references: [id])
+  product_id        String
+  product           Product       @relation(fields: [product_id], references: [id])
+  ordered_qty       Float
+  received_qty      Float         @default(0.00)
+  cost              Float
+}
+
+// ----------------------------------------
+// SETTINGS MODULE
+// ----------------------------------------
+
+model StoreSetting {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  value       String
+  description String?
+  updated_at  DateTime @updatedAt
+}
+
+// ----------------------------------------
+// USER & AUTH MODULE
+// ----------------------------------------
+
+model User {
+  id         String   @id @default(uuid())
+  username   String   @unique
+  password   String   
+  name       String
+  role       String   @default("CASHIER") // 'ADMIN', 'CASHIER'
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+}
+// ----------------------------------------
+// EXPENSE MODULE
+// ----------------------------------------
+
+model Expense {
+  id           String   @id @default(uuid())
+  description  String
+  category     String   // e.g., 'UTILITIES', 'RENT', 'SALARY', 'OTHER'
+  amount       Float
+  expense_date DateTime @default(now())
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
+}
