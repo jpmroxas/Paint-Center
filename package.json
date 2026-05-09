@@ -4,7 +4,7 @@
   "description": "Paint Center Sales and Inventory Management System",
   "scripts": {
     "install-all": "npm install --prefix frontend && npm install --prefix backend",
-    "build": "npm run install-all && npm run build --prefix frontend && cd backend && npx prisma generate && npx prisma migrate deploy",
+    "build": "npm run install-all && npm run build --prefix frontend && cd backend && npx prisma generate && npx prisma migrate deploy && node scripts/seed-admin.js",
     "start": "node backend/index.js"
   },
   "engines": {
